@@ -1,5 +1,11 @@
 import numpy as np
 
+"""
+    (Deep learning and practice Lab-0)
+
+    The script to stimulate the function of nn in pytorch (without pytorch library)
+"""
+
 class Module(object):
     def __init__(self):
         pass

@@ -4,7 +4,7 @@ import nn as nn
 """
     (Deep learning and practice Lab-0)
 
-    The main script
+    The bonus part
 """
 
 # Training parameters
@@ -12,17 +12,19 @@ epochs = 100000
 
 class Network(nn.Module):
     """
-        Define network structure (1 hidden layers)
+        Define network structure (2 hidden layers)
     """
     def __init__(self):
         self.fc1 = nn.Linear(2, 3)
         self.act1 = nn.Sigmoid()
-        self.fc2 = nn.Linear(3, 1)
+        self.fc2 = nn.Linear(3, 10)
         self.act2 = nn.Sigmoid()
+        self.fc3 = nn.Linear(10, 1)
+        self.act3 = nn.Sigmoid()
 
     def forward(self, x):
         x = x.T
-        self.graph = [self.fc1, self.act1, self.fc2, self.act2]
+        self.graph = [self.fc1, self.act1, self.fc2, self.act2, self.fc3, self.act3]
         for op in self.graph:
             x = op(x)
         return x
