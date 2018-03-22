@@ -1,6 +1,6 @@
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.autograd import Variable
-from torch.optim import SGD
+from torch.optim import SGD, Adam
 from torch.nn import init
 from model import ResNet
 import torchvision.transforms as transforms
@@ -43,7 +43,7 @@ def train(args):
                 transforms.ToTensor(),
                 transforms.Normalize([0.4914, 0.4824, 0.4467], [0.2471, 0.2435, 0.2616])
         ])), 
-        batch_size = args.batch_size, shuffle=False, num_workers=2
+        batch_size = args.batch_size, shuffle=True, num_workers=2
     )
     test_loader = torch.utils.data.DataLoader(
         dataset = torchvision.datasets.CIFAR10(root='./data', train=False, download = True, 
@@ -53,7 +53,7 @@ def train(args):
                 transforms.ToTensor(),
                 transforms.Normalize([0.4914, 0.4824, 0.4467], [0.2471, 0.2435, 0.2616])
         ])), 
-        batch_size = args.batch_size, shuffle=False, num_workers=2
+        batch_size = args.batch_size, shuffle=True, num_workers=2
     )
     criterion = nn.CrossEntropyLoss()   
 
@@ -64,7 +64,7 @@ def train(args):
     kaiming_init(resnet)
     resnet = resnet.cuda() if torch.cuda.is_available() else resnet
     resnet_optimizer = SGD(resnet.parameters(), lr=0.1, momentum = 0.9, weight_decay = 0.0001)
-    resnet_scheduler = MultiStepLR(resnet_optimizer, [81, 122], gamma = 0.1)
+    resnet_scheduler = MultiStepLR(resnet_optimizer, [80, 120], gamma = 0.2)
 
 
     # Define vanilla CNN and optimizer
@@ -72,7 +72,7 @@ def train(args):
     kaiming_init(vanilla_cnn)
     vanilla_cnn = vanilla_cnn.cuda() if torch.cuda.is_available() else vanilla_cnn
     vanilla_optimizer = SGD(vanilla_cnn.parameters(), lr=0.1, momentum = 0.9, weight_decay = 0.0001)
-    vanilla_scheduler = MultiStepLR(vanilla_optimizer, [81, 122], gamma = 0.1)
+    vanilla_scheduler = MultiStepLR(vanilla_optimizer, [80, 120], gamma = 0.2)
 
     # Train
     for epoch in range(args.epoch):

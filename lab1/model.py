@@ -11,21 +11,24 @@ class ResNet(nn.Module):
         self.layers = []
 
         # 1st conv
-        self.layers += [nn.Conv2d(3, 16, 7, padding=3)]
+        self.layers += [nn.Conv2d(3, 32, 11, padding=5),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU()
+        ]
 
         # Residual block
-        prev_channel = 16
-        curr_channel = 16
+        prev_channel = 32
+        curr_channel = 32
         for i in range(3):
             for j in range(block_num):
-                curr_channel = curr_channel * 2 if curr_channel != (2 ** (i + 4)) else curr_channel
+                curr_channel = curr_channel * 2 if curr_channel != (2 ** (i + 5)) else curr_channel
                 stride = 2 if (j == 0 and i > 0) else 1
                 self.layers += [ResidualBasicBlock(prev_channel, curr_channel, stride, skip_connection)]
                 prev_channel = prev_channel * 2 if i != 0 and j == 0 else prev_channel
         
         # Last
         self.layers = nn.Sequential(*self.layers)
-        self.fc = nn.Linear(64, 10)
+        self.fc = nn.Linear(128, 10)
 
     def forward(self, x):
         x = self.layers(x)
