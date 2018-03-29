@@ -11,25 +11,6 @@ final_psnr = 0.
 psnr_HR = 0.
 
 def load_img(args):
-    """
-    # Load image
-    imgs = dict()
-    imgs['HR_np'] = io.imread(args.gt)
-    height, width, _ = np.shape(imgs['HR_np'])
-    imgs['LR_np'] = transform.resize(imgs['HR_np'], (height // args.factor, width // args.factor))
-    imgs['nearest_np'] = transform.resize(imgs['LR_np'], (height, width), order = 0)
-    imgs['bicubic_np'] = transform.resize(imgs['LR_np'], (height, width), order = 3)
-    imgs['HR_np'] = (imgs['HR_np'] / 255.)
-
-    # Transpose as pytorch format and print log
-    imgs['HR_np'] = np.transpose(imgs['HR_np'], [2, 0, 1]).astype(np.float32)
-    imgs['LR_np'] = np.transpose(imgs['LR_np'], [2, 0, 1]).astype(np.float32)
-    imgs['nearest_np'] = np.transpose(imgs['nearest_np'], [2, 0, 1]).astype(np.float32)
-    imgs['bicubic_np'] = np.transpose(imgs['bicubic_np'], [2, 0, 1]).astype(np.float32)
-    print ('PSNR bicubic: %.4f   PSNR nearest: %.4f' %  (
-                    compare_psnr(imgs['HR_np'], imgs['bicubic_np']), 
-                    compare_psnr(imgs['HR_np'], imgs['nearest_np'])))
-    """
     imgs = load_LR_HR_imgs_sr(args.gt , -1, 4, 'CROP')
     imgs['bicubic_np'], imgs['sharp_np'], imgs['nearest_np'] = get_baselines(imgs['LR_pil'], imgs['HR_pil'])
     print ('PSNR bicubic: %.4f   PSNR nearest: %.4f' %  (
@@ -42,8 +23,8 @@ def train(args, imgs):
     net = skip(
         num_input_channels = 32,
         num_output_channels = 3,
-        num_channels_down = [128, 128, 128, 128, 128],
-        num_channels_up = [128, 128, 128, 128, 128],
+        num_channels_down = [64, 64, 64, 128, 128],
+        num_channels_up = [64, 64, 64, 128, 128],
         num_channels_skip = [4, 4, 4, 4, 4],
         upsample_mode = 'bilinear',
         need_sigmoid = True,
@@ -88,7 +69,7 @@ def train(args, imgs):
         psnr_LR = compare_psnr(imgs['LR_np'], out_LR.data.cpu().numpy()[0])
         psnr_HR = compare_psnr(imgs['HR_np'], out_HR.data.cpu().numpy()[0])
         print('Iteration %05d   Loss %3f    PSNR_LR %.3f   PSNR_HR %.3f' % (iteration, total_loss.data[0], psnr_LR, psnr_HR), '\r', end = '')
-        if iteration % 100 == 0:
+        if iteration % 500 == 0 or iteration == args.epoch - 1:
             out_HR_np = var_to_np(out_HR)
             # plot_image_grid([imgs['HR_np'], imgs['bicubic_np'], np.clip(out_HR_np, 0, 1)], factor=13, nrow=3)
             io.imsave('sr_' + str(iteration) + '.png', np.transpose(np.clip(out_HR_np, 0, 1), [1, 2, 0])[:, :, :3])
@@ -97,7 +78,7 @@ def train(args, imgs):
 
     # Optimize (Adam with first 100 epoch and LBFGS with rest)
     p = get_params('net', net, net_input)
-    optimizer = torch.optim.Adam(net.parameters(), lr=0.001, weight_decay = 0.0001)
+    optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
     for j in range(100):
         optimizer.zero_grad()
         closure()

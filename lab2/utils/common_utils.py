@@ -235,5 +235,19 @@ def optimize(optimizer_type, parameters, closure, LR, num_iter):
             optimizer.zero_grad()
             closure()
             optimizer.step()
+    elif optimizer_type == 'sgd':
+        # Do several steps with adam first
+        optimizer = torch.optim.Adam(parameters, lr=0.001)
+        for j in range(100):
+            optimizer.zero_grad()
+            closure()
+            optimizer.step()
+
+        print('Starting optimization with SGD')
+        optimizer = torch.optim.SGD(parameters, lr=LR)
+        for j in range(num_iter - 100):
+            optimizer.zero_grad()
+            closure()
+            optimizer.step()
     else:
         assert False

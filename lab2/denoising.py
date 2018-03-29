@@ -27,10 +27,10 @@ def load_img(args):
 def train(args, img_noisy_np, img_np):
     # Load model
     net = skip(
-        num_input_channels = 3,
+        num_input_channels = 32,
         num_output_channels = 3,
-        num_channels_down = [128, 128, 128, 128, 128],
-        num_channels_up = [128, 128, 128, 128, 128],
+        num_channels_down = [64, 64, 64, 128, 128],
+        num_channels_up = [64, 64, 64, 128, 128],
         num_channels_skip = [4, 4, 4, 4, 4],
         upsample_mode = 'bilinear',
         need_sigmoid = True,
@@ -48,19 +48,21 @@ def train(args, img_noisy_np, img_np):
     img_noisy_var = np_to_var(img_noisy_np).float()
 
     # define input
-    net_input = get_noise(3, 'noise', (np.shape(img_np)[1], np.shape(img_np)[2])).float().detach()
+    net_input = get_noise(32, 'noise', (np.shape(img_np)[1], np.shape(img_np)[2])).float().detach()
     img_noisy_var = np_to_var(img_noisy_np).float()
     img_noisy_var = img_noisy_var.cuda() if torch.cuda.is_available() else img_noisy_var
     net_input_saved = net_input.data.clone()
     noise = net_input.data.clone()
+    net_input = net_input.cuda() if torch.cuda.is_available() else net_input
+    net_input_saved = net_input_saved.cuda() if torch.cuda.is_available() else net_input_saved
+    noise = noise.cuda() if torch.cuda.is_available() else noise
 
     # Define closure
     reg_noise_std = 1./30.
-    net_input.data = net_input_saved + (noise.normal_() * reg_noise_std)
-    net_input = net_input.cuda() if torch.cuda.is_available() else net_input
     def closure():
         global iteration
         global final_psnr
+        net_input.data = net_input_saved + (torch.cuda.FloatTensor(noise.size()).normal_() * reg_noise_std)
         out = net(net_input)
         total_loss = criterion(out, img_noisy_var)
         total_loss.backward()
@@ -77,7 +79,7 @@ def train(args, img_noisy_np, img_np):
 
     # Work
     p = get_params('net', net, net_input)
-    optimize('LBFGS', p, closure, 0.01, args.epoch)
+    optimize('adam', p, closure, 0.001, args.epoch)
     print('Final PSNR: ', final_psnr)
 
 if __name__ == '__main__':
