@@ -145,6 +145,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--epoch', default = 1, type = int, help = 'The value of epoch')
     parser.add_argument('--image_path', default = './images/SR_GT.png', type = str, help = 'The path of natural image')
-    parser.add_argument('--model_path', default = './sr.ckpt', type = str, help = 'The path of trained model')
+    # parser.add_argument('--model_path', default = './sr.ckpt', type = str, help = 'The path of trained model')
     args = parser.parse_args()
     train(args, io.imread(args.image_path))
