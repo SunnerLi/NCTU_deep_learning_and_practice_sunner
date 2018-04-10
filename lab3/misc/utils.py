@@ -1,4 +1,4 @@
-from torch.autograzd import Variable
+from torch.autograd import Variable
 import torch.nn as nn
 import collections
 import torch
