@@ -46,7 +46,7 @@ def to_contiguous(tensor):
     if tensor.is_contiguous():
         return tensor
     else:
-        tensor.contiguous()
+        return tensor.contiguous()
 
 def set_lr(optimizer, lr):
     for group in optimizer.param_groups:
@@ -54,5 +54,5 @@ def set_lr(optimizer, lr):
 
 def clip_gradient(optimizer, grad_clip):
     for group in optimizer.param_groups:
-        for param in group:
+        for param in group['params']:
             param.grad.data.clamp_(-grad_clip, grad_clip)

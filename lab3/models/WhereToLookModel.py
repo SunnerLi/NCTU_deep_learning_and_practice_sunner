@@ -1,0 +1,2 @@
+class WhereToLookModel():
+    pass

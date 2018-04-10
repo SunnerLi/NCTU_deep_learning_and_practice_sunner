@@ -13,6 +13,7 @@ class DataLoader(data.Dataset):
     def reset_iterator(self, split):
         del self._prefetch_process[split]
         self._prefetch_process[split] = BlobFetcher(split, self, split == 'train')
+        self.iterators[split] = 0
 
     def get_vocab_size(self):
         return self.vocab_size
@@ -24,12 +25,24 @@ class DataLoader(data.Dataset):
         return self.seq_length
 
     def read_files(self):
-        self.feats_fc = h5py.File(os.path.join(self.opt.input_fc_dir, 'feats_fc.h5'), 'r')
-        self.feats_att = h5py.File(os.path.join(self.opt.input_att_dir, 'feats_att.h5'), 'r')
+        self.feats_fc = h5py.File(os.path.join('data/cocotalk_fc', 'feats_fc.h5'), 'r')
+        self.feats_att = h5py.File(os.path.join('data/cocotalk_att', 'feats_att.h5'), 'r')
 
     def get_data(self, ix):
         self.read_files()
-        pass#????
+        index = str(self.info['images'][ix]['id'])
+        if self.use_att:
+            return (
+                np.array(self.feats_fc[index]).astype('float32'),
+                np.array(self.feats_att[index]).astype('float32'),
+                ix
+            )
+        else:
+            return (
+                np.array(self.feats_fc[index]).astype('float32'),
+                np.zeros((1, 1, 1)).astype('float32'),
+                ix
+            )
 
     def __init__(self, opt):
         self.opt = opt
@@ -45,11 +58,11 @@ class DataLoader(data.Dataset):
         self.print('Vocabulary size  : ', self.vocab_size)
 
         # Open hdf5 file
-        self.print('Loading hdf5 file: ', self.opt.input_fc_dir, \
-            self.opt.input_att_dir, self.opt.input_label_h5)
-        self.h5_label_file = h5py.File(self.opt.input_label_h5, 'r', driver = 'core')
-        self.input_fc_dir = self.opt.input_fc_dir
-        self.input_att_dir = self.opt.input_att_dir
+        self.print('Loading hdf5 file: ', 'data/cocotalk_fc', \
+            'data/cocotalk_att', 'data/cocotalk_label.h5')
+        self.h5_label_file = h5py.File('data/cocotalk_label.h5', 'r', driver = 'core')
+        self.input_fc_dir = 'data/cocotalk_fc'
+        self.input_att_dir = 'data/cocotalk_att'
 
         # Load sequence data
         # * label = (N, T, F)
@@ -85,7 +98,7 @@ class DataLoader(data.Dataset):
 
         # Define terminate task
         def cleanUp():
-            for split in self._prefetch_process.keys():
+            for split in self.iterators.keys():
                 del self._prefetch_process[split]
         import atexit
         atexit.register(cleanUp)
@@ -142,7 +155,7 @@ class DataLoader(data.Dataset):
 
         # Generate mask
         nonzeros = np.array(list(map(lambda x: (x != 0).sum() + 2, label_batch)))
-        for ix, row in enumerate(label_batch):
+        for ix, row in enumerate(mask_batch):
             row[:nonzeros[ix]] = 1
 
         # Record final batch info
@@ -152,7 +165,7 @@ class DataLoader(data.Dataset):
         data['labels'] = label_batch
         data['gts'] = gts
         data['masks'] = mask_batch
-        data['bound'] = {
+        data['bounds'] = {
             'it_pos_now': self.iterators[split],
             'it_max': len(self.split_ix[split]),
             'wrapped': wrapped
@@ -185,19 +198,19 @@ class BlobFetcher():
         ))
 
     def _get_next_minibatch_inds(self):
-        max_index = len(self.dataloader.split_ix[self.split])
+        max_index = len(self.data_loader.split_ix[self.split])
         wrapped = False
 
-        ri = self.dataloader.iterators[self.split]
-        ix = self.dataloader.split_ix[self.split][ri]
+        ri = self.data_loader.iterators[self.split]
+        ix = self.data_loader.split_ix[self.split][ri]
 
         ri_next = ri + 1
         if ri_next >= max_index:
             ri_next = 0
             if self.if_shuffle:
-                random.shuffle(self.dataloader.split_ix[self.split])
+                random.shuffle(self.data_loader.split_ix[self.split])
             wrapped = True
-        self.dataloader.iterators[self.split] = ri_next
+        self.data_loader.iterators[self.split] = ri_next
 
         return ix, wrapped
 
