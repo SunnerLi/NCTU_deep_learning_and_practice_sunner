@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from torch.autograd import Variable
 from json import encoder
 import misc.utils as utils
@@ -13,8 +14,9 @@ import sys
 
 def eval_split(model, crit, loader, eval_kwargs={}):
     verbose = eval_kwargs.get('verbose', True)
-    num_images = eval_kwargs.get('num_images', eval_kwargs.get('val_images_use', -1))
-    split = eval_kwargs.get('split', 'val')
+    num_images = 5000
+    minimun_loss = 10.00
+    split = 'val'
     lang_eval = eval_kwargs.get('language_eval', 0)
     dataset = eval_kwargs.get('dataset', 'coco')
     beam_size = eval_kwargs.get('beam_size', 1)
@@ -42,6 +44,7 @@ def eval_split(model, crit, loader, eval_kwargs={}):
             loss = crit(model(fc_feats, att_feats, labels), labels[:,1:], masks[:,1:]).data[0]
             loss_sum = loss_sum + loss
             loss_evals = loss_evals + 1
+            minimun_loss = min(minimun_loss, loss)
 
         # forward the model to also get generated samples for each image
         # Only leave one feature for each image, in case duplicate sample
@@ -78,7 +81,7 @@ def eval_split(model, crit, loader, eval_kwargs={}):
             predictions.pop()
 
         if verbose:
-            print('evaluating validation preformance... %d/%d (%f)' %(ix0 - 1, ix1, loss))
+            print('evaluating validation preformance... %d/%d (%f) \t Minimun loss: %.3f' %(ix0 - 1, ix1, loss, minimun_loss))
 
         if data['bounds']['wrapped']:
             break
@@ -91,4 +94,4 @@ def eval_split(model, crit, loader, eval_kwargs={}):
 
     # Switch back to training mode
     model.train()
-    return loss_sum/loss_evals, predictions, lang_stats
+    return loss_sum/loss_evals, predictions, lang_stats, minimun_loss

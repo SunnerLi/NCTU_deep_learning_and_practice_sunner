@@ -193,7 +193,7 @@ class BlobFetcher():
             sampler = sampler,
             shuffle = False,
             pin_memory = True,
-            num_workers = multiprocessing.cpu_count(),
+            num_workers = 2,
             collate_fn = lambda x: x[0]
         ))
 

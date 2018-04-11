@@ -36,7 +36,7 @@ def decode_sequence(ix2word, seq):
             if ix > 0:
                 if j >= 1:
                     txt += ' '
-                txt += ix2word[ix]
+                txt += ix2word[str(ix)]
             else:
                 break
         out.append(txt)

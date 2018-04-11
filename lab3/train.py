@@ -1,3 +1,4 @@
+from matplotlib import pyplot as plt
 from torch.autograd import Variable
 from torch.optim import Adam
 from dataloader import *
@@ -20,7 +21,7 @@ if __name__ == '__main__':
     # Train from scratch
     iteration = 0
     epoch = 0
-    minimun_loss = 10.00
+    loss_list = []
     update_lr_flag = False
 
     # Load model
@@ -55,25 +56,27 @@ if __name__ == '__main__':
         utils.clip_gradient(optimizer, 0.1)
         optimizer.step()
         train_loss = loss.data[0]
-        minimun_loss = min(minimun_loss, train_loss)
+        loss_list.append(train_loss)
         torch.cuda.synchronize()
         forward_backward_time = time.time() - start
-        # print("Epoch : {} \t Iter : {} \t Train_loss : {:.3f} \t Min loss : {:.3f} \t Load data time : {:.3f} \t Train time : {:.3f} \r" \
-            # .format(epoch, iteration, train_loss, minimun_loss, load_data_time, forward_backward_time))
+        print("Epoch : {} \t Iter : {} \t Train_loss : {:.3f} \t Load data time : {:.3f} \t Train time : {:.3f} \r" \
+            .format(epoch, iteration, train_loss, load_data_time, forward_backward_time))
 
         # Update iteration and epoch
         iteration += 1
         if data['bounds']['wrapped']:
             epoch += 1
-            update_lr_flag = True
+            update_lr_flag = True            
 
-        # Validate
-        if iteration % 10:
-            eval_arg = {'split': 'val', 'dataset': 'data/cocotalk.json'}
-            eval_arg.update(vars(opt))
-            val_loss, predictions, lang_states = eval_utils.eval_split(model, criterion, loader, eval_arg)
-            minimun_loss = min(val_loss, minimun_loss)
-            print("< Validate > Epoch : {} \t Iter : {} \t Minimun loss: {:.3f}".format(epoch, iteration, minimun_loss))
-
-        if epoch > 1:
+        if epoch > opt.epoch:
+        # if iteration > 10:
             break
+
+    # Validate
+    eval_arg = {'split': 'val', 'dataset': 'data/cocotalk.json'}
+    eval_arg.update(vars(opt))
+    val_loss, predictions, lang_states, minimun_loss = eval_utils.eval_split(model, criterion, loader, eval_arg)
+    print('Final minimun validation loss: {:.3f}'.format(minimun_loss))
+    plt.plot(range(len(loss_list)), loss_list, label = 'Training loss curve')
+    plt.legend()
+    plt.show()
