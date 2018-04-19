@@ -9,6 +9,7 @@ def parse():
     parser.add_argument('--epoch', type=int, default=1, help='number of epochs')
     parser.add_argument('--beam_size', type=int, default=1, help='The size of beam search') 
     parser.add_argument('--train_only', type=int, default=0, help='if true then use 80k, else use 110k')
+    parser.add_argument('--image_folder', type=str, default='', help='The path of validation image folder')
 
     # Parse and validate
     args = parser.parse_args()

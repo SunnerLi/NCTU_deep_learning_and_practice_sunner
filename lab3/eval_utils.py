@@ -41,7 +41,8 @@ def eval_split(model, crit, loader, eval_kwargs={}):
             tmp = [Variable(torch.from_numpy(_), volatile=True).cuda() for _ in tmp]
             fc_feats, att_feats, labels, masks = tmp
 
-            loss = crit(model(fc_feats, att_feats, labels), labels[:,1:], masks[:,1:]).data[0]
+            captions = model(fc_feats, att_feats, labels)
+            loss = crit(captions, labels[:,1:], masks[:,1:]).data[0]
             loss_sum = loss_sum + loss
             loss_evals = loss_evals + 1
             minimun_loss = min(minimun_loss, loss)
@@ -53,7 +54,7 @@ def eval_split(model, crit, loader, eval_kwargs={}):
         tmp = [Variable(torch.from_numpy(_), volatile=True).cuda() for _ in tmp]
         fc_feats, att_feats = tmp
         # forward the model to also get generated samples for each image
-        seq, _ = model.sample(fc_feats, att_feats, eval_kwargs)
+        seq, _ = model.sample(fc_feats, att_feats, record_attention = False, opt = eval_kwargs)
         
         #set_trace()
         sents = utils.decode_sequence(loader.get_vocab(), seq)

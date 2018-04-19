@@ -10,6 +10,11 @@ import models
 import torch
 import time
 import opts
+import os
+
+"""
+    run: python3 train.py --caption_model show_attend_tell --batch_size 32
+"""
 
 if __name__ == '__main__':
     opt = opts.parse()
@@ -26,6 +31,9 @@ if __name__ == '__main__':
 
     # Load model
     model = models.setup(opt)
+    checkpoint_path = opt.caption_model + '_model.pth'
+    if os.path.exists(checkpoint_path):
+        model.load_state_dict(torch.load(checkpoint_path))
     model.cuda()
     criterion = utils.LanguageModelCriterion()
     optimizer = Adam(model.parameters(), lr = 0.0004)
@@ -51,7 +59,8 @@ if __name__ == '__main__':
 
         # forward & backward
         optimizer.zero_grad()
-        loss = criterion(model(fc_feats, att_feats, labels), labels[:, 1:], masks[:, 1:])
+        captions = model(fc_feats, att_feats, labels)
+        loss = criterion(captions, labels[:, 1:], masks[:, 1:])
         loss.backward()
         utils.clip_gradient(optimizer, 0.1)
         optimizer.step()
@@ -68,15 +77,27 @@ if __name__ == '__main__':
             epoch += 1
             update_lr_flag = True            
 
-        if epoch > opt.epoch:
-        # if iteration > 10:
+        # if epoch > opt.epoch:
+        if iteration > 15:
             break
+        # break
 
     # Validate
     eval_arg = {'split': 'val', 'dataset': 'data/cocotalk.json'}
     eval_arg.update(vars(opt))
-    val_loss, predictions, lang_states, minimun_loss = eval_utils.eval_split(model, criterion, loader, eval_arg)
-    print('Final minimun validation loss: {:.3f}'.format(minimun_loss))
+    # val_loss, predictions, lang_states, minimun_loss = eval_utils.eval_split(model, criterion, loader, eval_arg)
+    # print('Final minimun validation loss: {:.3f}'.format(minimun_loss))
     plt.plot(range(len(loss_list)), loss_list, label = 'Training loss curve')
     plt.legend()
-    plt.show()
+    # plt.show()
+
+    # Save
+    checkpoint_path = opt.caption_model + '_model.pth'
+    torch.save(model.state_dict(), checkpoint_path)
+    print("model saved to {}".format(checkpoint_path))
+    infos = {}
+    infos['split_ix'] = loader.split_ix
+    infos['opt'] = opt
+    infos['vocab'] = loader.get_vocab()
+    with open(opt.caption_model + '_infos.pkl', 'wb') as f:
+        pickle.dump(infos, f)

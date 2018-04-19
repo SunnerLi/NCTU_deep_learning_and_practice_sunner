@@ -47,6 +47,7 @@ class ShowAttendTellModel(nn.Module):
         state = self.init_hidden(fc_feats)
 
         outputs = []
+        # attention_masks = []
 
         for i in range(seq.size(1) - 1):
             if self.training and i >= 1 and self.ss_prob > 0.0: # otherwiste no need to sample
@@ -70,10 +71,13 @@ class ShowAttendTellModel(nn.Module):
 
             xt = self.embed(it)
 
-            output, state = self.core(xt, fc_feats, att_feats, state)
+            # output, state, attention_mask = self.core(xt, fc_feats, att_feats, state, record_attention = False)
+            output, state = self.core(xt, fc_feats, att_feats, state, record_attention = False)
             output = F.log_softmax(self.logit(self.dropout(output)))
             outputs.append(output)
+            # attention_masks.append(attention_mask)
 
+        # return torch.cat([_.unsqueeze(1) for _ in outputs], 1), torch.stack(attention_masks, dim = 0)
         return torch.cat([_.unsqueeze(1) for _ in outputs], 1)
 
     def get_logprobs_state(self, it, tmp_fc_feats, tmp_att_feats, state):
@@ -85,7 +89,7 @@ class ShowAttendTellModel(nn.Module):
 
         return logprobs, state
 
-    def sample(self, fc_feats, att_feats, opt={}):
+    def sample(self, fc_feats, att_feats, record_attention = False, opt={}):
         sample_max = 1
         beam_size = 1
         temperature = 1.0
@@ -97,6 +101,7 @@ class ShowAttendTellModel(nn.Module):
 
         seq = []
         seqLogprobs = []
+        attentions = []
         for t in range(self.seq_length + 1):
             if t == 0: # input <bos>
                 it = fc_feats.data.new(batch_size).long().zero_()
@@ -127,10 +132,19 @@ class ShowAttendTellModel(nn.Module):
                 seq.append(it) #seq[t] the input of t+2 time step
                 seqLogprobs.append(sampleLogprobs.view(-1))
 
-            output, state = self.core(xt, fc_feats, att_feats, state)
+            if record_attention:
+                output, state, att = self.core(xt, fc_feats, att_feats, state, record_attention)
+            else:
+                output, state = self.core(xt, fc_feats, att_feats, state, record_attention)
+                
+            if record_attention:
+                attentions.append(att)
             logprobs = F.log_softmax(self.logit(self.dropout(output)))
 
-        return torch.cat([_.unsqueeze(1) for _ in seq], 1), torch.cat([_.unsqueeze(1) for _ in seqLogprobs], 1)
+        if record_attention:
+            return torch.cat([_.unsqueeze(1) for _ in seq], 1), torch.cat([_.unsqueeze(1) for _ in seqLogprobs], 1), torch.cat(attentions, 0)
+        else:
+            return torch.cat([_.unsqueeze(1) for _ in seq], 1), torch.cat([_.unsqueeze(1) for _ in seqLogprobs], 1)
 
 class ShowAttendTellCore(nn.Module):
     def __init__(self, opt):
@@ -155,7 +169,7 @@ class ShowAttendTellCore(nn.Module):
             self.ctx2att = nn.Linear(self.att_feat_size, 1)
             self.h2att = nn.Linear(self.rnn_size, 1)
 
-    def forward(self, xt, fc_feats, att_feats, state):
+    def forward(self, xt, fc_feats, att_feats, state, record_attention):
         att_size = att_feats.numel() // att_feats.size(0) // self.att_feat_size
         att = att_feats.view(-1, self.att_feat_size)
         if self.att_hid_size > 0:
@@ -180,4 +194,7 @@ class ShowAttendTellCore(nn.Module):
         att_res = torch.bmm(weight.unsqueeze(1), att_feats_).squeeze(1) # batch * att_feat_size
 
         output, state = self.rnn(torch.cat([xt, att_res], 1).unsqueeze(0), state)
-        return output.squeeze(0), state
+        if record_attention:
+            return output.squeeze(0), state, weight
+        else:
+            return output.squeeze(0), state
