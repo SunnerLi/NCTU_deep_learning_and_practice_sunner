@@ -3,7 +3,7 @@ import argparse
 def parse():
     parser = argparse.ArgumentParser()
     parser.add_argument('--caption_model', type=str, default="show_tell", \
-        help = 'show_tell, show_attend_tell, topdown, where_to_look')
+        help = 'show_tell, show_attend_tell, top_down, where_to_look')
     parser.add_argument('--num_layers', type=int, default=1, help='number of layers in the RNN')
     parser.add_argument('--batch_size', type=int, default=16, help='minibatch size')
     parser.add_argument('--epoch', type=int, default=1, help='number of epochs')

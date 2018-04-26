@@ -77,8 +77,8 @@ if __name__ == '__main__':
             epoch += 1
             update_lr_flag = True            
 
-        # if epoch > opt.epoch:
-        if iteration > 15:
+        if epoch > opt.epoch:
+        # if iteration > 15:
             break
         # break
 
@@ -89,6 +89,7 @@ if __name__ == '__main__':
     # print('Final minimun validation loss: {:.3f}'.format(minimun_loss))
     plt.plot(range(len(loss_list)), loss_list, label = 'Training loss curve')
     plt.legend()
+    plt.savefig("loss_curve.png")
     # plt.show()
 
     # Save

@@ -31,10 +31,12 @@ def eval_split(model, crit, loader, eval_kwargs={}):
     loss_sum = 0
     loss_evals = 1e-8
     predictions = []
+    loss_list = []
     while True:
         data = loader.get_batch(split)
         n = n + loader.batch_size
 
+        # print('label: ', data.get('labels', None))
         if data.get('labels', None) is not None:
             # forward the model to get loss
             tmp = [data['fc_feats'], data['att_feats'], data['labels'], data['masks']]
@@ -74,6 +76,7 @@ def eval_split(model, crit, loader, eval_kwargs={}):
                 print('image %s: %s' %(entry['image_id'], entry['caption']))
 
         # if we wrapped around the split or used up val imgs budget then bail
+        loss_list.append(loss)
         ix0 = data['bounds']['it_pos_now']
         ix1 = data['bounds']['it_max']
         if num_images != -1:
@@ -82,7 +85,7 @@ def eval_split(model, crit, loader, eval_kwargs={}):
             predictions.pop()
 
         if verbose:
-            print('evaluating validation preformance... %d/%d (%f) \t Minimun loss: %.3f' %(ix0 - 1, ix1, loss, minimun_loss))
+            print('evaluating validation preformance... %d/%d (%f) \t Minimun loss: %.3f \t Average loss: %.3f' %(ix0 - 1, ix1, loss, minimun_loss, np.sum(loss_list) / len(loss_list)))
 
         if data['bounds']['wrapped']:
             break

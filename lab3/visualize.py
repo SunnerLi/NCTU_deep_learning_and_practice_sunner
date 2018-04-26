@@ -43,7 +43,7 @@ if __name__ == '__main__':
                             'cnn_model': 'resnet101'})
 
     # Load infos
-    with open(opt.caption_model + '_infos.pkl', 'rb') as f:
+    with open(opt.caption_model + '_infos_or.pkl', 'rb') as f:
         infos = pickle.load(f)
     loader.ix_to_word = infos['vocab']
     loader.vocab_size = len(infos['vocab'])
@@ -60,7 +60,7 @@ if __name__ == '__main__':
 
     # Load model
     model = models.setup(opt)
-    model.load_state_dict(torch.load(opt.caption_model + '_model.pth'))
+    model.load_state_dict(torch.load(opt.caption_model + '_model_or.pth'))
     model.cuda()
     loader.reset_iterator(split)
 
@@ -92,7 +92,9 @@ if __name__ == '__main__':
             # print(np.shape(original_img), np.min(original_img), np.max(original_img))
             weighted_img = maskMul(cv2.resize(image, (640, 426)), original_img)
             # weighted_img = cv2.resize(image, (640, 426))
+            weighted_img = cv2.cvtColor(weighted_img, cv2.COLOR_BGR2RGB)
             cv2.imshow('origin image', original_img)
             cv2.imshow('image with attention', weighted_img)
+            cv2.imwrite(str(i) + '.png', weighted_img * 255)
             cv2.waitKey()
         break
