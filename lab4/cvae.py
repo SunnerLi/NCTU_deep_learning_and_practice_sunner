@@ -1,7 +1,7 @@
 from torchvision import datasets, transforms
 from torchvision.utils import save_image
-from torch.nn import functional as F
 from matplotlib import pyplot as plt
+from torch.nn import functional as F
 from torch.autograd import Variable
 from torch import nn, optim
 from model import CVAE
@@ -60,7 +60,7 @@ def main(args):
     torch.manual_seed(args.seed)
     kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
     train_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('../data', train=True, download=True,
+        datasets.MNIST('./data', train=True, download=True,
                        transform=transforms.ToTensor()),
         batch_size=args.batch_size, shuffle=True, **kwargs)
 
@@ -82,6 +82,7 @@ def main(args):
         save_image(sample.view(100, 1, 28, 28).data, os.path.join(args.folder, 'sample_' + str(epoch) + '.png'), nrow = 10)
     plt.plot(range(len(loss_list)), loss_list, '-o')
     plt.savefig(os.path.join(args.folder, 'cvae_loss_curve.png'))
+    torch.save(model.state_dict(), os.path.join(args.folder, 'cvae.pth'))
 
 if __name__ == '__main__':
     args = parse()

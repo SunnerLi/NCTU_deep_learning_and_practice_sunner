@@ -64,7 +64,7 @@ def main(args):
     torch.manual_seed(args.seed)
     kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
     train_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('../data', train=True, download=True,
+        datasets.MNIST('./data', train=True, download=True,
                        transform=transforms.ToTensor()),
         batch_size=args.batch_size, shuffle=True, **kwargs)
 
