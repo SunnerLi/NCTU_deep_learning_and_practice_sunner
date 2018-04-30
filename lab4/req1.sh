@@ -1,0 +1,1 @@
+python3 vae.py --epochs 20 --log-interval 1000

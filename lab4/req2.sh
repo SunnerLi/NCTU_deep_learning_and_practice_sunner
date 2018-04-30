@@ -1,0 +1,1 @@
+python3 cvae.py --epochs 20 --log-interval 1000
