@@ -1,5 +1,6 @@
 from torchvision.utils import save_image
 from torch.utils.data import DataLoader
+from matplotlib import pyplot as plt
 from torch.autograd import Variable
 from model import FrontEnd, G, D, Q
 import torchvision.transforms as transforms
@@ -69,7 +70,7 @@ class Trainer:
         # Define data loader
         dataloader = DataLoader(
             dset.MNIST(
-                './dataset', 
+                './data', 
                 transform = transforms.ToTensor(), 
                 download = True
             ), 
@@ -87,7 +88,6 @@ class Trainer:
 
         idx = np.arange(10).repeat(10)
         idx = np.reshape(np.reshape(idx, [10, 10]).T, -1)
-        print(np.shape(idx))
         one_hot = np.zeros((100, 10))
         one_hot[range(100), idx] = 1
         fix_noise = torch.Tensor(100, 62).uniform_(-1, 1)
@@ -95,6 +95,12 @@ class Trainer:
         # --------------------------------------------------------------------
         # Train
         # --------------------------------------------------------------------
+        generator_loss_list = []
+        discriminator_loss_list = []
+        posterior_loss_list = []
+        real_data_prob_list = []
+        fake_data_before_prob_list = []
+        fake_data_after_prob_list = []
         for epoch in range(self.args.epochs):
             for num_iters, batch_data in enumerate(dataloader, 0):
                 # real part
@@ -151,9 +157,14 @@ class Trainer:
                 if num_iters % self.args.log_interval == 0:
                     
                     print('Epoch/Iter:{0}/{1}, Dloss: {2}, Gloss: {3}'.format(
-                      epoch, num_iters, D_loss.data.cpu().numpy(),
-                      G_loss.data.cpu().numpy())
+                      epoch, num_iters, D_loss.data.cpu().numpy()[0],
+                      G_loss.data.cpu().numpy()[0])
                     )
+                    generator_loss_list.append(reconstruct_loss.data[0])
+                    discriminator_loss_list.append(D_loss.data[0])
+                    posterior_loss_list.append((dis_loss + con_loss).data[0])
+                    
+                    # print(probs_real.mean(), probs_fake.mean())
 
                     noise.data.copy_(fix_noise)
                     dis_c.data.copy_(torch.Tensor(one_hot))
@@ -161,8 +172,36 @@ class Trainer:
                     con_c.data.copy_(torch.from_numpy(c1))
                     z = torch.cat([noise, dis_c, con_c], 1).view(-1, 74, 1, 1)
                     x_save = self.G(z)
-                    print(x_save.size())
                     save_image(x_save.data, os.path.join(args.path, 'c1.png'), nrow=10)
+
+                    # Record the probability
+                    real_data_prob_list.append(probs_real.mean().data[0])
+                    fake_data_before_prob_list.append(probs_fake.mean().data[0])
+                    probs_fake = self.D(fe_out2)
+                    fake_data_after_prob_list.append(probs_fake.mean().data[0])
+
+                # if num_iters > 20:
+                #     break
+
+        # Plot loss curve
+        plt.plot(range(len(generator_loss_list)), generator_loss_list, '-', label = 'G loss')
+        plt.plot(range(len(discriminator_loss_list)), discriminator_loss_list, '-', label = 'D loss')
+        plt.plot(range(len(posterior_loss_list)), posterior_loss_list, '-', label = 'Q loss')
+        plt.legend()
+        plt.show()
+
+        # Plot probability curve
+        plt.plot(range(len(real_data_prob_list)), real_data_prob_list, '-', label = 'real prob')
+        plt.plot(range(len(fake_data_before_prob_list)), fake_data_before_prob_list, '-', label = 'fake prob (before)')
+        plt.plot(range(len(fake_data_after_prob_list)), fake_data_after_prob_list, '-', label = 'fake prob (after)')
+        plt.legend()
+        plt.show()
+
+    def save(self):
+        torch.save(self.G.state_dict(), os.path.join(args.path, 'g.pth'))
+        torch.save(self.FE.state_dict(), os.path.join(args.path, 'fe.pth'))
+        torch.save(self.D.state_dict(), os.path.join(args.path, 'd.pth'))
+        torch.save(self.Q.state_dict(), os.path.join(args.path, 'q.pth'))
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -198,3 +237,4 @@ if __name__ == '__main__':
 
     trainer = Trainer(g, fe, d, q, args)
     trainer.train()
+    trainer.save()

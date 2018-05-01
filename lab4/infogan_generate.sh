@@ -1,0 +1,1 @@
+python3 infogan_generate.py --label 5 --num 10
