@@ -124,6 +124,8 @@ class Trainer:
 
                 # fake part
                 z, idx = self._noise_sample(dis_c, con_c, noise, bs)
+                print(z.size())
+                exit()
                 fake_x = self.G(z)
                 fe_out2 = self.FE(fake_x.detach())
                 probs_fake = self.D(fe_out2)
