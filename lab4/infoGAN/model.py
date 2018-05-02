@@ -17,16 +17,16 @@ class _netG(nn.Module):
     def __init__(self):
         super(_netG, self).__init__()
         self.main = nn.Sequential(
-            nn.ConvTranspose2d(74, 512, 4, 1, bias=True),
+            nn.ConvTranspose2d(74, 1024, 4, 1, bias=True),
+            nn.BatchNorm2d(1024),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(1024, 512, 4, 2, 1, bias=True),
             nn.BatchNorm2d(512),
             nn.ReLU(True),
             nn.ConvTranspose2d(512, 256, 4, 2, 1, bias=True),
             nn.BatchNorm2d(256),
             nn.ReLU(True),
-            nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=True),
-            nn.BatchNorm2d(128),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(128, 64, 4, 2, 1, bias=True),
+            nn.ConvTranspose2d(256, 64, 4, 2, 1, bias=True),
             nn.BatchNorm2d(64),
             nn.ReLU(True),
             nn.ConvTranspose2d(64, 1, 4, 2, 1, bias=True),
@@ -81,7 +81,7 @@ class InfoGAN(nn.Module):
         self.optimD = optim.Adam(
             itertools.chain(
                 self.D.main.parameters(),self.D.discriminator.parameters()),
-            lr=0.0002, betas=(0.5, 0.99)
+            lr=0.0001, betas=(0.5, 0.99)
         )
         self.optimG = optim.Adam(
             itertools.chain(
@@ -112,8 +112,8 @@ class InfoGAN(nn.Module):
 
         # fake
         self._noise_sample(self.batch_size)
-        fake_x = self.G(self.noise)
-        prob_fake, _ = self.D(fake_x)
+        self.fake_x = self.G(self.noise)
+        prob_fake, _ = self.D(self.fake_x.detach())
         loss_fake = self.criterionD(prob_fake, torch.zeros_like(prob_fake))
 
         # merge
@@ -121,9 +121,7 @@ class InfoGAN(nn.Module):
         self.loss_D.backward()
 
     def backward_G_and_Q(self, optimizer = None):
-        self._noise_sample(self.batch_size)
-        fake_x = self.G(self.noise)
-        self.prob_fake, self.posterior_fake = self.D(fake_x)
+        self.prob_fake, self.posterior_fake = self.D(self.fake_x)
         dis_loss = self.criterionQ(self.posterior_fake, self.class_target)
         reconst_loss = self.criterionD(self.prob_fake, torch.ones_like(self.prob_fake))
         self.loss_G = reconst_loss + dis_loss
