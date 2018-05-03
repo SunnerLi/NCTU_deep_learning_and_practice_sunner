@@ -1,1 +1,1 @@
-python3 cvae_generate.py --digits 6 --num 15
+python3 ./vae/cvae_generate.py --digits 6 --num 15

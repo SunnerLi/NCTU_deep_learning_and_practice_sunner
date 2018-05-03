@@ -1,1 +1,2 @@
-python3 vae.py --epochs 20 --log-interval 1000
+# Train VAE
+python3 vae/vae.py --epochs 100 --log-interval 1000

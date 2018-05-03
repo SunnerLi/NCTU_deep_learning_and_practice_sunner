@@ -1,1 +1,2 @@
-python3 cvae.py --epochs 20 --log-interval 1000
+# Train conditional VAE
+python3 ./vae/cvae.py --epochs 100 --log-interval 1000

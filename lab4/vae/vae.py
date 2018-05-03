@@ -57,8 +57,8 @@ def train(epoch, model, loader, optimizer):
 
 def main(args):
     # Check if the output folder is exist
-    if not os.path.exists('./results/'):
-        os.mkdir('./results/')
+    if not os.path.exists('./vae_results/'):
+        os.mkdir('./vae_results/')
 
     # Load data
     torch.manual_seed(args.seed)
@@ -82,9 +82,9 @@ def main(args):
         sample = torch.randn(64, 20)
         sample = Variable(sample).cuda() if torch.cuda.is_available() else Variable(sample)
         sample = model.decode(sample).cpu()
-        save_image(sample.view(64, 1, 28, 28).data, 'results/sample_' + str(epoch) + '.png')
+        save_image(sample.view(64, 1, 28, 28).data, 'vae_results/sample_' + str(epoch) + '.png')
     plt.plot(range(len(loss_list)), loss_list, '-o')
-    plt.savefig('results/vae_loss_curve.png')
+    plt.savefig('vae_results/vae_loss_curve.png')
 
 if __name__ == '__main__':
     args = parse()
