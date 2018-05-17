@@ -21,7 +21,8 @@
 // 定義output stream
 std::ostream& info  = std::cout;
 std::ostream& error = std::cerr;
-std::ostream& debug = *(new std::ofstream);
+// std::ostream& debug = *(new std::ofstream);
+std::ostream& debug = std::cout;
 
 /**
  * 64-bit 定義 2048盤面
@@ -320,6 +321,398 @@ class board {
         };
 };
 
-int main() {
+/**
+ * 定義N-tuple network的權重表
+ */
+class feature {
+    public:
+        // Constructor and destructor
+        feature(size_t len) : length(len), weight(alloc(len)) {}
+        feature(feature&& f) : length(f.length), weight(f.weight) { f.weight = nullptr; }
+        feature(const feature& f) = delete;
+        virtual ~feature() {delete[] weight;}
 
+        // Operator overloadding
+        feature& operator =  (const feature& f) = delete;
+        float&   operator [] (size_t i) { return weight[i]; }
+        float    operator [] (size_t i) const { return weight[i]; }
+
+        // Else
+        size_t size() const { return length; }
+
+        // The other virtual function that should be implement in the AI bot
+        virtual float estimate(const board& b) const = 0;
+        virtual float update(const board& b, float u) = 0;
+        virtual std::string name() const = 0;
+
+        /**
+	     * dump the detail of weight table of a given board
+	     */
+	    virtual void dump(const board& b, std::ostream& out = info) const {
+	    	out << b << "estimate = " << estimate(b) << std::endl;
+	    }
+
+	    friend std::ostream& operator <<(std::ostream& out, const feature& w) {
+	    	std::string name = w.name();
+	    	int len = name.length();
+	    	out.write(reinterpret_cast<char*>(&len), sizeof(int));
+	    	out.write(name.c_str(), len);
+	    	float* weight = w.weight;
+	    	size_t size = w.size();
+	    	out.write(reinterpret_cast<char*>(&size), sizeof(size_t));
+	    	out.write(reinterpret_cast<char*>(weight), sizeof(float) * size);
+	    	return out;
+	    }
+
+	    friend std::istream& operator >>(std::istream& in, feature& w) {
+	    	std::string name;
+	    	int len = 0;
+	    	in.read(reinterpret_cast<char*>(&len), sizeof(int));
+	    	name.resize(len);
+	    	in.read(&name[0], len);
+	    	if (name != w.name()) {
+	    		error << "unexpected feature: " << name << " (" << w.name() << " is expected)" << std::endl;
+	    		std::exit(1);
+	    	}
+	    	float* weight = w.weight;
+	    	size_t size;
+	    	in.read(reinterpret_cast<char*>(&size), sizeof(size_t));
+	    	if (size != w.size()) {
+	    		error << "unexpected feature size " << size << "for " << w.name();
+	    		error << " (" << w.size() << " is expected)" << std::endl;
+	    		std::exit(1);
+	    	}
+	    	in.read(reinterpret_cast<char*>(weight), sizeof(float) * size);
+	    	if (!in) {
+	    		error << "unexpected end of binary" << std::endl;
+	    		std::exit(1);
+	    	}
+	    	return in;
+	    }
+
+    protected:
+        // 表格長度和權重表指標
+        size_t length;
+        float* weight;
+
+        /**
+         * 分配權重表的記憶體，大小為num
+         */
+        static float* alloc(size_t num){
+            static size_t total = 0;
+            static size_t limit = (1 << 30) / sizeof(float);    // 最多分配1G
+            try{
+                total += num;
+                if (total > limit) 
+                    throw std::bad_alloc();
+                return new float[num];
+            } catch (std::bad_alloc&) {
+                error << "You cannot allocate the memory more than 1G!" << std::endl;
+                std::exit(-1);
+            }
+            return nullptr;
+        }
+};
+
+/**
+ * 定義pattern （繼承自feature）
+ * 輸入的參數代表位置
+ * 版面定義如下：
+ * 
+ * index:
+ *  0  1  2  3
+ *  4  5  6  7
+ *  8  9 10 11
+ * 12 13 14 15
+ */ 
+class pattern : public feature {
+    public:
+        // Constructor and destructor
+        pattern(const std::vector<int>& p, int iso = 8) : feature(1 << (p.size() * 4)), iso_last(iso) {
+            if (p.empty()) {
+                error << "no pattern defined" << std::endl;
+                std::exit(1);
+            }
+            // find the whole isomorphic patterns
+            for (int i = 0; i < 8; i++) {
+                board idx = 0xfedcba9876543210ull;
+                if (i >= 4)
+                    idx.mirror();
+                idx.rotate(i);
+                for (int t : p) {
+                    isomorphic[i].push_back(idx.at(t));
+                }
+            }
+
+        }
+        pattern(const pattern& p) = delete;
+        virtual ~pattern() {}
+        
+        // operator overloadding
+        pattern& operator = (const pattern& p) = delete;
+
+        /**
+         * 估計給定盤面的價值
+         */ 
+        virtual float estimate(const board& b) const {
+            float value = 0;
+            for (int i = 0; i < iso_last; i++) {
+                size_t index = indexof(isomorphic[i], b);
+                value += operator[](index);
+            }
+            return value;
+        }
+
+        /**
+         * 更新盤面上相對應位置的權重
+         */
+        virtual float update(const board& b, float alpha) {
+            float alpha_split = alpha / iso_last;
+            float value = 0;
+            for (int i = 0; i < iso_last; i++) {
+                size_t index = indexof(isomorphic[i], b);
+                operator[](index) += alpha_split;
+                value += operator[](index);
+            }
+            return value;
+        }
+
+        /**
+         * 獲取此pattern的名子 (多少tuple)
+         */
+        virtual std::string name() const {
+            return std::to_string(isomorphic[0].size())
+                + "-tuple pattern " + nameof(isomorphic[0]);
+        }
+
+        /**
+         * 設置有多少isomorphic情況
+         */
+        void set_isomorphic(int i = 8) {
+            iso_last = i;
+        }
+
+        /**
+         * 印出給定盤面的權重資訊
+         */
+        void dump(const board& b, std::ostream& out = info) const {
+            for(int i = 0; i < iso_last; i++) {
+                out << "#" << i << ":" << nameof(isomorphic[i]) << "(";
+			    size_t index = indexof(isomorphic[i], b);
+			    for (size_t i = 0; i < isomorphic[i].size(); i++) {
+			    	out << std::hex << ((index >> (4 * i)) & 0x0f);
+			    }
+			    out << std::dec << ") = " << operator[](index) << std::endl;
+            }
+        }
+
+        /**
+         * 給定盤面和一個pattern index，輸出它在權重表中的的index
+         */
+        size_t indexof(const std::vector<int>& patt, const board& b) const {
+            size_t index = 0;
+            for (size_t i = 0; i < patt.size(); i++)
+		    	index |= b.at(patt[i]) << (4 * i);
+		    return index;
+        }
+
+        /**
+         * 輸出pattern的index數字串，並轉成字串形式
+         */
+        std::string nameof(const std::vector<int>& patt) const {
+            std::stringstream ss;
+            ss << std::hex;
+            std::copy(patt.cbegin(), patt.cend(), std::ostream_iterator<int>(ss, ""));
+            return ss.str();
+        }
+
+    protected:
+        std::array<std::vector<int>, 8> isomorphic;
+        int iso_last;
+
+};
+
+/**
+ * before state and after state wrapper
+ */
+class state {
+    public:
+        // Constructor
+        state(int opcode = -1)
+            : opcode(opcode), score(-1), esti(-std::numeric_limits<float>::max()) {}
+        state(const board& b, int opcode = -1)
+            : opcode(opcode), score(-1), esti(-std::numeric_limits<float>::max()) {
+                assign(b);
+            }
+        state(const state& st) = default;
+
+        // Operator overloadding
+        state& operator = (const state& st) = default;
+        bool operator == (const state& s) const {
+            return (opcode == s.opcode) && (before == s.before) && (after == s.after) && (esti == s.esti) && (score == s.score);
+        }
+        bool operator < (const state& s) const {
+    		if (before != s.before) throw std::invalid_argument("state::operator<");
+    		    return esti < s.esti;
+    	}
+    	bool operator !=(const state& s) const { return !(*this == s); }
+    	bool operator > (const state& s) const { return s < *this; }
+    	bool operator <=(const state& s) const { return !(s < *this); }
+    	bool operator >=(const state& s) const { return !(*this < s); }
+        friend std::ostream& operator <<(std::ostream& out, const state& st) {
+	    	out << "moving " << st.name() << ", reward = " << st.score;
+	    	if (st.is_valid()) {
+	    		out << ", value = " << st.esti << std::endl << st.after;
+	    	} else {
+	    		out << " (invalid)" << std::endl;
+	    	}
+	    	return out;
+	    }   
+
+        // 基本操作 - get and set
+        board after_state()  const { return after;  }
+        board before_state() const { return before; }
+        float value()  const { return esti;   }
+        float reward() const { return score;  }
+        float action() const { return opcode; }
+
+        void set_before_state(const board& b) { before = b; }
+        void set_after_state (const board& b) { after  = b; }
+        void set_value(float v) { esti = v;   }
+        void set_reward (int r) { score = r;  }
+        void set_action (int a) { opcode = a; }
+
+        /**
+         * Assign before state，並施加動作得到after state，
+         * 回傳動作是否為無效數值
+         */
+        bool assign(const board& b) {
+            debug << "assign " << name() << std::endl << b;
+            after = before = b;
+            score = after.move(opcode);
+            esti = score;
+            return score != -1;
+        }
+
+        /**
+         * 回傳opcode代表的英文動作，
+         * 如果opcode為無效值，則回傳英文字none
+         */
+        const char* name() const {
+            static const char* opname[4] = { "up", "right", "down", "left" };
+            return (opcode >= 0 && opcode < 4) ? opname[opcode] : "none";
+        }
+
+        /**
+         * 檢查目前state object中的各項元素是否有效
+         * 若
+         * 1. value數值為NaN
+         * 2. before state等於after state
+         * 3. reward為-1
+         * 則無效(有問題)
+         */
+        bool is_valid() const {
+            if (std::isnan(esti)) {
+                error << "numeric exception" << std::endl;
+                std::exit(1);
+            }
+            return after != before && opcode != -1 && score != -1;
+        }
+
+
+    private:
+        board before;
+        board after;
+        int opcode;
+        int score;
+        float esti;
+};
+
+class learning {
+    public: 
+        // Constructor and destructor
+        learning() {}
+        ~learning() {}
+
+        /**
+         * 為特定的feature配置記憶體
+         */
+        void add_feature(feature* feat) {
+            feats.push_back(feat);
+
+            info << "[     AI Bot    ] Allocate ";
+            info << feat->name() << " , size = " << feat->size();
+            size_t usage = feat->size() * sizeof(float);
+            if (usage >= (1 << 30)) {
+		    	info << " (" << (usage >> 30) << "GB)";
+		    } else if (usage >= (1 << 20)) {
+		    	info << " (" << (usage >> 20) << "MB)";
+		    } else if (usage >= (1 << 10)) {
+		    	info << " (" << (usage >> 10) << "KB)";
+		    }
+            info << std::endl;
+        }
+
+        /**
+         * 載入預訓練模型
+         * 注意：你需要先呼叫add_feature把所有pattern都定義好了以後，
+         * 才能呼叫此函式
+         */
+        void load(const std::string& path) {
+	    	std::ifstream in;
+	    	in.open(path.c_str(), std::ios::in | std::ios::binary);
+	    	if (in.is_open()) {
+	    		size_t size;
+	    		in.read(reinterpret_cast<char*>(&size), sizeof(size));
+	    		if (size != feats.size()) {
+	    			error << "unexpected feature count: " << size << " (" << feats.size() << " is expected)" << std::endl;
+	    			std::exit(1);
+	    		}
+	    		for (feature* feat : feats) {
+	    			in >> *feat;
+	    			info << feat->name() << " is loaded from " << path << std::endl;
+	    		}
+	    		in.close();
+	    	}
+	    }
+
+
+    private:
+        std::vector<feature*> feats;    // 紀錄有哪些feature的表
+};
+
+int main() {
+    info << "<< TD learning for game 2048 >>" << std::endl;
+    learning tdl;
+
+    // Set the learning parameters
+    float alpha  = 0.1;         // 學習率
+    size_t total = 1;           // 遊玩次數
+    unsigned seed;              // 隨機種子
+    __asm__ __volatile__ ("rdtsc" : "=a" (seed));
+	info << "[hyper-parameter] alpha = " << alpha << std::endl;
+	info << "[hyper-parameter] total = " << total << std::endl;
+	info << "[hyper-parameter] seed  = " << seed << std::endl;
+    std::srand(seed);
+
+    // Initialize the features
+    tdl.add_feature(new pattern({0, 1, 2, 3}));
+    tdl.add_feature(new pattern({4, 5, 6, 7}));
+
+    // Load the pre-trained model
+    tdl.load("");
+
+    // Train
+    std::vector<state> path;    // 紀錄每一個時間點的state
+    path.reserve(20000);        // 為vector保留至少20000個state空間
+    for(size_t episode = 1; episode <= total; episode++) {
+        // 初始化盤面和total revard
+        debug << "begin episode" << std::endl;
+        board b;
+        b.init();
+        int score = 0;
+        for(size_t i = 0; i < 1; i++) {
+            debug << "state" << std::endl << b;
+        }
+    }
 }
