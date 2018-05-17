@@ -21,8 +21,8 @@
 // 定義output stream
 std::ostream& info  = std::cout;
 std::ostream& error = std::cerr;
-// std::ostream& debug = *(new std::ofstream);
-std::ostream& debug = std::cout;
+std::ostream& debug = *(new std::ofstream);
+// std::ostream& debug = std::cout;
 
 /**
  * 64-bit 定義 2048盤面
@@ -676,9 +676,148 @@ class learning {
 	    	}
 	    }
 
+        /**
+         * 儲存訓練模型
+         */
+        void save(const std::string& path) {
+	    	std::ofstream out;
+	    	out.open(path.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+	    	if (out.is_open()) {
+	    		size_t size = feats.size();
+	    		out.write(reinterpret_cast<char*>(&size), sizeof(size));
+	    		for (feature* feat : feats) {
+	    			out << *feat;
+	    			info << feat->name() << " is saved to " << path << std::endl;
+	    		}
+	    		out.flush();
+	    		out.close();
+	    	}
+	    }
+
+        /**
+         * 對於一個盤面（4個pattern）估計總價值
+         */
+        float estimate(const board& b) const {
+            debug << "estimate " << std::endl << b;
+            float value = 0;
+            for (feature* feat : feats) {
+                value += feat->estimate(b);
+            }
+            return value;
+        }
+
+        /**
+         * 對於一個盤面b，選擇一個最好的移動情況，並返回一個state object
+         * 返回的state object中，
+         * before_state() 是 t 時間點的before state，也就是s_{t}
+         * after_state() 是 t 時間點的after state，也就是s'_{t}
+         * action() 是 t 時間點最後做的動作，也就是a_{t}
+         * reward() 是 t 時間點獲得的 reward，也就是R_{t}
+         * value() 是 t 時間點透過after state value function獲得的value數值，也就是V^{af}(S^{af}_{t})
+         */
+        state select_best_move(const board& b) const {
+            state after[4] = { 0, 1, 2, 3 };
+            state* best = after;
+            for (state* move = after; move != after + 4; move++) {
+                if (move->assign(b)) {                                  // 如果此次移動為一個有效移動
+                    move->set_value(estimate(move->after_state()));     // 設定after state value為此盤面的結果
+                    // move->set_value(move->reward() + estimate(move->after_state()));
+                    if (move->value() > best->value())                  // 如果有更好的after state value
+                        best = move;                                    // 則更新best state
+                } else {                                                // 若不為有效移動
+                    move->set_value(-std::numeric_limits<float>::max());// 則設置after state value為負無限大
+                }
+                debug << "test " << *move;
+            }
+            return *best;
+        }
+
+        /**
+         * 對整個episode進行更新
+         * 在過程中的每一步，會呼叫update()函式來更新單一時間步
+         */
+        void update_episode(std::vector<state>& path, float alpha = 0.1) const {
+            float exact = 0;
+            for (path.pop_back(); path.size(); path.pop_back()) {
+                state& move = path.back();  // 獲取要更新的state
+                float error = exact - move.value();
+                debug << "update error = " << error << " for after state" << std::endl << move.after_state();
+                exact = move.reward() + update(move.after_state(), alpha * error);
+            }
+        }
+
+        /**
+         * 給定一個state更新它的權重，並返回value
+         */
+        float update(const board& b, float u) const {
+            debug << "update " << " (" << u << ")" << std::endl << b;
+            float u_split = u / feats.size();
+            float value = 0;
+            for (feature* feat : feats) {
+                value += feat->update(b, u_split);
+            }
+            return value;
+        }
+
+        /**
+	     * update the statistic, and display the status once in 1000 episodes by default
+	     *
+	     * the format would be
+	     * 1000   mean = 273901  max = 382324
+	     *        512     100%   (0.3%)
+	     *        1024    99.7%  (0.2%)
+	     *        2048    99.5%  (1.1%)
+	     *        4096    98.4%  (4.7%)
+	     *        8192    93.7%  (22.4%)
+	     *        16384   71.3%  (71.3%)
+	     *
+	     * where (let unit = 1000)
+	     *  '1000': current iteration (games trained)
+	     *  'mean = 273901': the average score of last 1000 games is 273901
+	     *  'max = 382324': the maximum score of last 1000 games is 382324
+	     *  '93.7%': 93.7% (937 games) reached 8192-tiles in last 1000 games (a.k.a. win rate of 8192-tile)
+	     *  '22.4%': 22.4% (224 games) terminated with 8192-tiles (the largest) in last 1000 games
+	     */
+	    void make_statistic(size_t n, const board& b, int score, int unit = 1000) {
+	    	scores.push_back(score);
+	    	maxtile.push_back(0);
+	    	for (int i = 0; i < 16; i++) {
+	    		maxtile.back() = std::max(maxtile.back(), b.at(i));
+	    	}
+
+	    	if (n % unit == 0) { // show the training process
+	    		if (scores.size() != size_t(unit) || maxtile.size() != size_t(unit)) {
+	    			error << "wrong statistic size for show statistics" << std::endl;
+	    			std::exit(2);
+	    		}
+	    		int sum = std::accumulate(scores.begin(), scores.end(), 0);
+	    		int max = *std::max_element(scores.begin(), scores.end());
+	    		int stat[16] = { 0 };
+	    		for (int i = 0; i < 16; i++) {
+	    			stat[i] = std::count(maxtile.begin(), maxtile.end(), i);
+	    		}
+	    		float mean = float(sum) / unit;
+	    		float coef = 100.0 / unit;
+	    		info << n;
+	    		info << "\t" "mean = " << mean;
+	    		info << "\t" "max = " << max;
+	    		info << std::endl;
+	    		for (int t = 1, c = 0; c < unit; c += stat[t++]) {
+	    			if (stat[t] == 0) continue;
+	    			int accu = std::accumulate(stat + t, stat + 16, 0);
+	    			info << "\t" << ((1 << t) & -2u) << "\t" << (accu * coef) << "%";
+	    			info << "\t(" << (stat[t] * coef) << "%)" << std::endl;
+	    		}
+	    		scores.clear();
+	    		maxtile.clear();
+	    	}
+	    }
+
 
     private:
         std::vector<feature*> feats;    // 紀錄有哪些feature的表
+        std::vector<int> scores;
+	    std::vector<int> maxtile;
 };
 
 int main() {
@@ -687,7 +826,7 @@ int main() {
 
     // Set the learning parameters
     float alpha  = 0.1;         // 學習率
-    size_t total = 1;           // 遊玩次數
+    size_t total = 5000;         // 遊玩次數
     unsigned seed;              // 隨機種子
     __asm__ __volatile__ ("rdtsc" : "=a" (seed));
 	info << "[hyper-parameter] alpha = " << alpha << std::endl;
@@ -696,8 +835,10 @@ int main() {
     std::srand(seed);
 
     // Initialize the features
-    tdl.add_feature(new pattern({0, 1, 2, 3}));
-    tdl.add_feature(new pattern({4, 5, 6, 7}));
+    // tdl.add_feature(new pattern({0, 1, 2, 3}));
+    // tdl.add_feature(new pattern({4, 5, 6, 7}));
+    tdl.add_feature(new pattern({ 0, 1, 2, 4, 5, 6 }));
+	tdl.add_feature(new pattern({ 4, 5, 6, 8, 9, 10 }));
 
     // Load the pre-trained model
     tdl.load("");
@@ -710,9 +851,29 @@ int main() {
         debug << "begin episode" << std::endl;
         board b;
         b.init();
-        int score = 0;
-        for(size_t i = 0; i < 1; i++) {
+        int total_reward = 0;
+        while (true) {
+        // for(size_t i = 0; i < 1; i++) {
             debug << "state" << std::endl << b;
+            state best = tdl.select_best_move(b);
+            path.push_back(best);
+
+            if (best.is_valid()) {                  // 如果best state是有效的state
+                debug << "best " << best;
+                total_reward += best.reward();      // 累加return
+                b = best.after_state();
+                b.popup();                          // 那就擷取best的after state，並跳出亂數tile
+            } else {                                // 如果best state是無效的state則結束遊戲
+                break;
+            }
         }
+        debug << "end episode" << std::endl;
+
+        // 更新 - TD afterstates
+        tdl.update_episode(path, alpha);
+        tdl.make_statistic(episode, b, total_reward);
+        path.clear();
     }
+
+    return 0;
 }
