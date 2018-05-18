@@ -826,7 +826,7 @@ int main() {
 
     // Set the learning parameters
     float alpha  = 0.1;         // 學習率
-    size_t total = 5000;         // 遊玩次數
+    size_t total = 10000;       // 遊玩次數
     unsigned seed;              // 隨機種子
     __asm__ __volatile__ ("rdtsc" : "=a" (seed));
 	info << "[hyper-parameter] alpha = " << alpha << std::endl;

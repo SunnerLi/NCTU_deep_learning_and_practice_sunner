@@ -21,8 +21,8 @@
 // 定義output stream
 std::ostream& info  = std::cout;
 std::ostream& error = std::cerr;
-// std::ostream& debug = *(new std::ofstream);
-std::ostream& debug = std::cout;
+std::ostream& debug = *(new std::ofstream);
+// std::ostream& debug = std::cout;
 
 /**
  * 64-bit 定義 2048盤面
@@ -729,7 +729,6 @@ class learning {
                     possible_22_tile.push_back(possible_b);
                     possible_b.set(space[i], 0);
                     possible_b.set(space[j], 0);
-                    info << " possible " << possible_b;
                 }
             }
 
@@ -793,7 +792,7 @@ class learning {
          * after_state() 是 t 時間點的after state，也就是s'_{t}
          * action() 是 t 時間點最後做的動作，也就是a_{t}
          * reward() 是 t 時間點獲得的 reward，也就是R_{t}
-         * value() 是 t 時間點透過after state value function獲得的value數值，也就是V^{af}(S^{af}_{t})
+         * value() 是 t 時間點透過before state value function獲得的value數值，也就是V(S_{t})
          */
         state select_best_move(const board& b) const {
             state after[4] = { 0, 1, 2, 3 };
@@ -809,6 +808,8 @@ class learning {
                 }
                 debug << "test " << *move;
             }
+
+            
             return *best;
         }
 
@@ -816,20 +817,19 @@ class learning {
          * 對整個episode進行更新
          * 在過程中的每一步，會呼叫update()函式來更新單一時間步
          */
-        // void update_episode(std::vector<state>& before_path, std::vector<state>& after_path, float alpha = 0.1) const {
         void update_episode(std::vector<state>& path, float alpha = 0.1) const {
             float exact = 0;
-            info << "path size: " << path.size() << std::endl;
-            // for (; before_path.size(); before_path.pop_back(), after_path.pop_back()) {
-            info << path[0] << path[1] << path[2];
-            info << "path size: " << path.size() << std::endl;
             for (path.pop_back(); path.size();path.pop_back()) {
-                state& stt = path.back();  // 獲取要更新的state
-                std::vector<state> sub_path(path.begin(), path.end() - 1);
-                state& st = sub_path.back();
-                float error = exact - st.value();
-                debug << "update error = " << error << " for before state" << std::endl << st.before_state();
-                exact = st.reward() + update(stt.value(), alpha * error);
+                state& move = path.back();  // 獲取要更新的state
+
+                /**
+                 * 這邊要注意一點！由於在select_best_move時，儲存的V值，是reward+E[V(S_{t+1})]
+                 * 但是更新的式子中，減去的term是V(S_{t})
+                 * 因此要調用estimate()函數重新對before_state進行價值估計。
+                 */
+                float error = exact - (estimate(move.before_state()));
+                debug << "update error = " << error << " for before state" << std::endl << move.before_state();
+                exact = move.reward() + update(move.before_state(), alpha * error);
             }
         }
 
@@ -913,7 +913,7 @@ int main() {
 
     // Set the learning parameters
     float alpha  = 0.1;         // 學習率
-    size_t total = 10000;         // 遊玩次數
+    size_t total = 10000;       // 遊玩次數
     unsigned seed;              // 隨機種子
     __asm__ __volatile__ ("rdtsc" : "=a" (seed));
 	info << "[hyper-parameter] alpha = " << alpha << std::endl;
@@ -922,12 +922,6 @@ int main() {
     std::srand(seed);
 
     // Initialize the features
-    // tdl.add_feature(new pattern({0, 1, 2, 3}));
-    // tdl.add_feature(new pattern({4, 5, 6, 7}));
-
-    // tdl.add_feature(new pattern({ 0, 1, 2, 4, 5, 6 }));
-	// tdl.add_feature(new pattern({ 4, 5, 6, 8, 9, 10 }));
-
     tdl.add_feature(new pattern({ 0, 1, 2, 3, 4, 5 }));
 	tdl.add_feature(new pattern({ 4, 5, 6, 7, 8, 9 }));
 	tdl.add_feature(new pattern({ 0, 1, 2, 4, 5, 6 }));
@@ -938,24 +932,19 @@ int main() {
 
     // Train
     std::vector<state> path;        
-    // std::vector<state> before_path; // 紀錄每一個時間點的state，S_{t}
-    // std::vector<state> after_path;  // 紀錄每一個時間點的state，S_{t+1}
     path.reserve(20000);
-    // before_path.reserve(20000);     // 為vector保留至少20000個state空間
-    // after_path.reserve(20000);      // 為vector保留至少20000個state空間
     for(size_t episode = 1; episode <= total; episode++) {
         // 初始化盤面和total revard
         debug << "begin episode" << std::endl;
         board b;
         b.init();
         int total_reward = 0;
-        // while (true) {
-        for(size_t i = 0; i < 10; i++) {
-            // before_path.push_back(b);
-            path.push_back(b);
+        while (true) {
+        // for(size_t i = 0; i < 10; i++) {
+
             debug << "state" << std::endl << b;
             state best = tdl.select_best_move(b);
-            // path.push_back(best);
+            path.push_back(best);
 
             if (best.is_valid()) {                  // 如果best state是有效的state
                 debug << "best " << best;
@@ -965,17 +954,15 @@ int main() {
             } else {                                // 如果best state是無效的state則結束遊戲
                 break;
             }
-            // after_path.push_back(b);
+
+            
         }
         debug << "end episode" << std::endl;
 
         // 更新 - TD(0)
-        // tdl.update_episode(before_path, after_path, alpha);
         tdl.update_episode(path, alpha);        
         tdl.make_statistic(episode, b, total_reward);
         path.clear();
-        // before_path.clear();
-        // after_path.clear();
     }
 
     return 0;
