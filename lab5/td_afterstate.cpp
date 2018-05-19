@@ -826,7 +826,7 @@ int main() {
 
     // Set the learning parameters
     float alpha  = 0.1;         // 學習率
-    size_t total = 1000000;       // 遊玩次數
+    size_t total = 1000000;     // 遊玩次數
     unsigned seed;              // 隨機種子
     __asm__ __volatile__ ("rdtsc" : "=a" (seed));
 	info << "[hyper-parameter] alpha = " << alpha << std::endl;
@@ -835,10 +835,10 @@ int main() {
     std::srand(seed);
 
     // Initialize the features
-    tdl.add_feature(new pattern({0, 1, 2, 3, 4, 5}));
-    tdl.add_feature(new pattern({4, 5, 6, 7, 8, 9}));
-    // tdl.add_feature(new pattern({ 0, 1, 2, 4, 5, 6 }));
-	// tdl.add_feature(new pattern({ 4, 5, 6, 8, 9, 10 }));
+    // tdl.add_feature(new pattern({0, 1, 2, 3, 4, 5}));
+    // tdl.add_feature(new pattern({4, 5, 6, 7, 8, 9}));
+    tdl.add_feature(new pattern({ 0, 1, 2, 4, 5, 6 }));
+	tdl.add_feature(new pattern({ 4, 5, 6, 8, 9, 10 }));
 
     // Load the pre-trained model
     tdl.load("");

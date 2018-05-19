@@ -5,7 +5,7 @@ import argparse
 def parse():
     parser = argparse.ArgumentParser()
     parser.add_argument('--log', default = './after_record.txt', type = str, help = 'The path of output log file')
-    parser.add_argument('--title', default = 'The curve of TD-afterstate', type = str, help = 'The title of the image')   
+    parser.add_argument('--title', default = 'The curve of TD after-state with pattern 1', type = str, help = 'The title of the image')   
     return parser.parse_args()
 
 def draw(args):
@@ -23,8 +23,8 @@ def draw(args):
         max_list.append(int(string.split('\t')[-1].split()[-1]))
 
     # Draw
-    plt.plot(range(len(mean_list)), mean_list, '-o', label = "The mean of total reward")
-    plt.plot(range(len(max_list)), max_list, '-o', label = "The maximun of total reward")
+    plt.plot(range(len(mean_list)), mean_list, '-', label = "The mean of total reward")
+    plt.plot(range(len(max_list)), max_list, '-', label = "The maximun of total reward")
     plt.title(args.title)
     plt.legend()
     plt.show()

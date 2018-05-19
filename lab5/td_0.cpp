@@ -798,18 +798,15 @@ class learning {
             state after[4] = { 0, 1, 2, 3 };
             state* best = after;
             for (state* move = after; move != after + 4; move++) {
-                if (move->assign(b)) {                                  // 如果此次移動為一個有效移動
-                    // move->set_value(estimate(move->after_state()));     // 設定after state value為此盤面的結果
+                if (move->assign(b)) {                                      // 如果此次移動為一個有效移動
                     move->set_value(move->reward() + expectation(move->after_state()));
-                    if (move->value() > best->value())                  // 如果有更好的after state value
-                        best = move;                                    // 則更新best state
-                } else {                                                // 若不為有效移動
-                    move->set_value(-std::numeric_limits<float>::max());// 則設置after state value為負無限大
+                    if (move->value() > best->value())                      // 如果有更好的after state value
+                        best = move;                                        // 則更新best state
+                } else {                                                    // 若不為有效移動
+                    move->set_value(-std::numeric_limits<float>::max());    // 則設置after state value為負無限大
                 }
                 debug << "test " << *move;
             }
-
-            
             return *best;
         }
 
@@ -913,7 +910,7 @@ int main() {
 
     // Set the learning parameters
     float alpha  = 0.1;         // 學習率
-    size_t total = 10000;       // 遊玩次數
+    size_t total = 1000000;     // 遊玩次數
     unsigned seed;              // 隨機種子
     __asm__ __volatile__ ("rdtsc" : "=a" (seed));
 	info << "[hyper-parameter] alpha = " << alpha << std::endl;
@@ -922,8 +919,8 @@ int main() {
     std::srand(seed);
 
     // Initialize the features
-    tdl.add_feature(new pattern({ 0, 1, 2, 3, 4, 5 }));
-	tdl.add_feature(new pattern({ 4, 5, 6, 7, 8, 9 }));
+    // tdl.add_feature(new pattern({ 0, 1, 2, 3, 4, 5 }));
+	// tdl.add_feature(new pattern({ 4, 5, 6, 7, 8, 9 }));
 	tdl.add_feature(new pattern({ 0, 1, 2, 4, 5, 6 }));
 	tdl.add_feature(new pattern({ 4, 5, 6, 8, 9, 10 }));
 
