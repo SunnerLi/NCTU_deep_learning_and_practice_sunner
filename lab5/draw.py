@@ -5,7 +5,7 @@ import argparse
 def parse():
     parser = argparse.ArgumentParser()
     parser.add_argument('--log', default = './after_record.txt', type = str, help = 'The path of output log file')
-    parser.add_argument('--title', default = 'The curve of TD after-state with pattern 1', type = str, help = 'The title of the image')   
+    parser.add_argument('--title', default = 'The curve of TD before-state with pattern 2', type = str, help = 'The title of the image')   
     return parser.parse_args()
 
 def draw(args):
