@@ -6,6 +6,7 @@
 from torch.autograd import Variable
 from model import DQN
 import numpy as np
+import torch
 import gym
 import os
 
@@ -28,12 +29,13 @@ def main():
         model_path = model_path
     )
     net.load()
+    net.cuda()
     reward_list = []
     for i in range(episode):
         s = env.reset()
         total_reward = 0
         while True:
-            # env.render()
+            env.render()
 
             # Select action and obtain the reward
             a = net.chooseAction(s)

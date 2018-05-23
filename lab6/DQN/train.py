@@ -5,6 +5,7 @@
 from matplotlib import pyplot as plt
 from torch.autograd import Variable
 from model import DQN
+import torch
 import gym
 
 # 定義 hyper parameters
@@ -33,6 +34,7 @@ if __name__ == '__main__':
         gamma = gamma,
         model_path = model_path
     )
+    net.cuda()
     net.load()
     reward_list = []
     for i in range(episode):

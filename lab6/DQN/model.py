@@ -60,10 +60,11 @@ class DQN:
             極少數用隨機來決定
         """
         x = to_var(x)
+        x = x.cuda() if torch.cuda.is_available() else x
         if np.random.uniform() > self.epsilon:  # 用DQN決定動作
             action_value = self.eval_net(x)
             _, action = torch.max(action_value, 0)
-            action = action[0].data.numpy()[0]
+            action = action[0].cpu().data.numpy()[0]
         else:                                   # 用隨機指定動作
             action = np.random.randint(0, self.n_action)
         return action
@@ -78,6 +79,11 @@ class DQN:
         self.memory_counter += 1
         if self.memory_counter >= self.memory_size and not self.had_fill_memory:
             self.had_fill_memory = True
+
+    def cuda(self):
+        if torch.cuda.is_available():
+            self.eval_net = self.eval_net.cuda()
+            self.target_net = self.target_net.cuda()
 
     def update(self):
         # 如果儲存的transition資訊太少，則不更新
@@ -101,6 +107,13 @@ class DQN:
         batch_a = to_var(batch_memory[:, self.n_state:self.n_state+1].astype(int), to_float = False)
         batch_r = to_var(batch_memory[:, self.n_state+1:self.n_state+2])
         batch_s_ = to_var(batch_memory[:, -self.n_state:])
+
+        # 移到GPU上
+        if torch.cuda.is_available():
+            batch_s = batch_s.cuda()
+            batch_a = batch_a.cuda()
+            batch_r = batch_r.cuda()
+            batch_s_ = batch_s_.cuda()         
 
         # ------------------------------------------------
         #                       更新
