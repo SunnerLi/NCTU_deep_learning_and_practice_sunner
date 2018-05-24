@@ -64,4 +64,4 @@ if __name__ == '__main__':
     env.close()
     plt.plot(range(len(reward_list)), reward_list, '-o')
     plt.title('The reward curve of DDPG')
-    # plt.show()
+    plt.show()
