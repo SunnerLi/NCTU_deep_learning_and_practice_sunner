@@ -1,4 +1,5 @@
-from model2 import DDPG
+from matplotlib import pyplot as plt
+from model import DDPG
 import numpy as np
 import torch
 import gym
@@ -8,10 +9,14 @@ import gym
 """
 
 # 定義hyper-parameters
-episode = 500
+episode = 1000
 max_iter = 200
 model_folder = './model'
-warmup = 20
+memory_size = 5000          # 記憶庫大小
+batch_size = 32
+tau = 0.01                  # 用多少比例的evaluate network參數來更新target network
+gamma = 0.99                # 用多少比例的 critic value來當作target q value
+var = 3.0                   # 動作搜索變異性
 
 if __name__ == '__main__':
     # Create environment
@@ -25,28 +30,38 @@ if __name__ == '__main__':
         n_state = n_state,
         n_action = n_action,
         a_limit = a_limit,
-        model_folder = model_folder
+        model_folder = model_folder,
+        memory_size = memory_size,
+        batch_size = batch_size,
+        tau = tau,
+        gamma = gamma,
+        var = var
     )
-    var = 3
+    net.load()
+
+    # Train
+    reward_list = []
     for i in range(episode):
         s = env.reset()
         total_reward = 0
         for j in range(max_iter):
             # env.render()
-           
             a = net.chooseAction(s)
-            a = np.clip(np.random.normal(a, var), -2, 2)
             s_, r, finish, info = env.step(a)
 
+            # 將資料存到記憶庫並更新參數
             net.store_path(s, a, r / 10, s_)
+            net.update()
 
-            if net.memory_counter > net.memory_size:
-                var *= .9995
-                net.update()
-
+            # 更新total reward和s_t資訊
             s = s_
             total_reward += r
             if j == max_iter - 1:
-                print("Episode: %d \tReward: %i \t Explore: %.2f \t Pointer: %d" % (i, total_reward, var, net.memory_counter))
+                print("Episode: %d \tReward: %i \t Explore: %.2f \t Pointer: %d" % (i, total_reward, net.var, net.memory_counter))
+                reward_list.append(total_reward)
                 break
+    net.save()
     env.close()
+    plt.plot(range(len(reward_list)), reward_list, '-o')
+    plt.title('The reward curve of DDPG')
+    # plt.show()

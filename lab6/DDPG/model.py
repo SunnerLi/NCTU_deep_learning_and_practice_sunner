@@ -1,4 +1,4 @@
-from random_process import OrnsteinUhlenbeckProcess
+from actor_critic import Actor, Critic
 from torch.autograd import Variable
 from torch.optim import Adam
 from util import to_var
@@ -6,46 +6,10 @@ import torch.nn.functional as F
 import torch.nn as nn
 import numpy as np
 import torch
-
-class Actor(nn.Module):
-    def __init__(self, n_state):
-        super(Actor, self).__init__()
-        self.main = nn.Sequential(
-            nn.Linear(n_state, 400),
-            nn.ReLU(),
-            nn.Linear(400, 300),
-            nn.ReLU(),
-            nn.Linear(300, 1),
-            nn.Tanh()
-        )
-
-    def forward(self, x):
-        return self.main(x)
-
-class Critic(nn.Module):
-    def __init__(self, n_state):
-        super(Critic, self).__init__()
-        self.front = nn.Sequential(
-            nn.Linear(n_state, 400),
-            nn.ReLU()
-        )
-        self.end = nn.Sequential(
-            nn.Linear(401, 300),
-            nn.ReLU(),
-            nn.Linear(300, 1),
-            nn.ReLU(),
-            nn.Linear(1, 1)
-        )
-
-    def forward(self, x, act):
-        x = self.front(x)
-        x = torch.cat([x, act], 1)
-        return self.end(x)
+import os
 
 class DDPG:
-    def __init__(self, n_state, n_action, a_limit, model_folder, memory_size = 500, 
-                    batch_size = 32, tau = 0.99, gamma = 0.99, 
-                    epsilon = 50000, is_training = True):
+    def __init__(self, n_state, n_action, a_limit, model_folder = None, memory_size = 10000, batch_size = 32, tau = 0.01, gamma = 0.99, var = 3.0):
         # Record the parameters
         self.n_state = n_state
         self.n_action = n_action
@@ -55,42 +19,44 @@ class DDPG:
         self.batch_size = batch_size
         self.tau = tau
         self.gamma = gamma
-        self.epsilon = epsilon
-        self.is_training = is_training
-        self.depsilon = 1.0 / self.epsilon
+        self.var = var
 
         # Create the network and related objects
         self.memory = np.zeros([self.memory_size, 2 * self.n_state + self.n_action + 1], dtype = np.float32)
         self.memory_counter = 0
-        self.eval_actor = Actor(self.n_state)
-        self.eval_critic = Critic(self.n_state)
-        self.target_actor = Actor(self.n_state)
-        self.target_critic = Critic(self.n_state)
-        self.hardCopy(self.target_actor, self.eval_actor)
-        self.hardCopy(self.target_critic, self.eval_critic)
-        self.actor_optimizer = Adam(self.eval_actor.parameters(), lr = 0.01)
-        self.critic_optimizer = Adam(self.eval_critic.parameters(), lr = 0.02)
+        self.eval_actor = Actor(self.n_state, self.n_action, self.a_limit)
+        self.eval_critic = Critic(self.n_state, self.n_action)
+        self.target_actor = Actor(self.n_state, self.n_action, self.a_limit, trainable = False)
+        self.target_critic = Critic(self.n_state, self.n_action, trainable = False)
+        
+        self.actor_optimizer = Adam(self.eval_actor.parameters(), lr = 0.001)
+        self.critic_optimizer = Adam(self.eval_critic.parameters(), lr = 0.002)
         self.criterion = nn.MSELoss()
-        self.random_process = OrnsteinUhlenbeckProcess(size = n_action,
-            theta = 0.15, mu = 0.0, sigma = 0.2)
+
+        # Make sure the parameter of target network is the same as evaluate network
+        self.hardCopy()
 
     def load(self):
-        pass
+        if os.path.exists(self.model_folder):
+            self.eval_actor.load_state_dict(torch.load(os.path.join(self.model_folder, 'actor.pth')))
+            self.eval_critic.load_state_dict(torch.load(os.path.join(self.model_folder, 'critic.pth')))
+        self.hardCopy()
 
-    def chooseAction(self, s, should_random = False, decay_epsilon = True):
+    def save(self):
+        if not os.path.exists(self.model_folder):
+            os.mkdir(self.model_folder)
+        torch.save(self.eval_actor.state_dict(), os.path.join(self.model_folder, 'actor.pth'))
+        torch.save(self.eval_critic.state_dict(), os.path.join(self.model_folder, 'critic.pth'))
+
+    def chooseAction(self, s):
         """
             給定輸入state，透過evaluate actor輸出[-1, 1]之間的實數動作值
         """
-        if not should_random:
-            s = to_var(s)
-            a = self.eval_actor(s)
-            a = a.cpu().data.numpy()
-            a += self.is_training * max(self.epsilon, 0) * self.random_process.sample()
-            a = np.clip(a, -1.0, 1.0)
-            if decay_epsilon:
-                self.epsilon -= self.depsilon
-        else:
-            a = np.random.uniform(-1.0, 1.0, size = self.n_action)
+        s = to_var(s)
+        a = self.eval_actor(s)
+        a = a.cpu().data.numpy()
+        if self.var > 0:
+            a = np.clip(np.random.normal(a, self.var), -2, 2)
         return a
 
     def store_path(self, s, a, r, s_):
@@ -102,26 +68,33 @@ class DDPG:
         self.memory[idx, :] = transition
         self.memory_counter += 1
 
-    def softCopy(self, target, source):
-        for target_param, source_param in zip(target.parameters(), source.parameters()):
-            target_param.data.copy_(
-                (1.0 - self.tau) * target_param.data + self.tau * source_param.data
-            )
+    def softCopy(self):
+        for ta, ea in zip(self.target_actor.parameters(), self.eval_actor.parameters()):
+            ta.data.copy_((1.0 - self.tau) * ta.data + self.tau * ea.data)
+        for tc, ec in zip(self.target_critic.parameters(), self.eval_critic.parameters()):
+            tc.data.copy_((1.0 - self.tau) * tc.data + self.tau * ec.data)
 
-    def hardCopy(self, target, source):
-        for target_param, source_param in zip(target.parameters(), source.parameters()):
-            target_param.data.copy_(source_param.data)
+    def hardCopy(self):
+        for ta, ea in zip(self.target_actor.parameters(), self.eval_actor.parameters()):
+            ta.data.copy_(ea.data)
+        for tc, ec in zip(self.target_critic.parameters(), self.eval_critic.parameters()):
+            tc.data.copy_(ec.data)
 
     def update(self):
         # 如果儲存的資訊太少就不更新
-        if self.memory_counter <= self.batch_size:
+        if self.memory_counter <= 5000:
             return
+
+        # 將evaluate network的參數複製進入target network中
+        self.softCopy()
         
         # 決定輸入的batch data
         if self.memory_counter > self.memory_size:
             sample_idx = np.random.choice(self.memory_size, size = self.batch_size)
         else:
             sample_idx = np.random.choice(self.memory_counter, size = self.batch_size)                
+
+        # 從記憶庫中擷取要訓練的資料
         batch_data = self.memory[sample_idx, :]
         batch_s = batch_data[:, :self.n_state]
         batch_a = batch_data[:, self.n_state:self.n_state+self.n_action]
@@ -136,23 +109,20 @@ class DDPG:
 
         # 用target network計算target Q值
         next_q_target = self.target_critic(batch_s_, self.target_actor(batch_s_))
-        next_q_target = Variable(next_q_target.data, volatile = False)
-        q_target = batch_r + self.gamma * next_q_target
+        q_target = batch_r + self.gamma * next_q_target            
 
         # 更新critic
         self.critic_optimizer.zero_grad()
-        a = self.eval_actor(batch_s)
-        q_batch = self.eval_critic(batch_s, a.detach())
-        value_loss = self.criterion(q_batch, q_target)
+        q_batch = self.eval_critic(batch_s, batch_a)
+        value_loss = F.mse_loss(input = q_batch, target = q_target)
         value_loss.backward()
         self.critic_optimizer.step()
 
         # 更新actor
         self.actor_optimizer.zero_grad()
-        policy_loss = -self.eval_critic(batch_s, a).mean()
+        policy_loss = -self.eval_critic(batch_s, self.eval_actor(batch_s)).mean()
         policy_loss.backward()
         self.actor_optimizer.step()
 
-        # 將evaluate network的參數複製進入target network中
-        self.softCopy(self.target_actor, self.eval_actor)
-        self.softCopy(self.target_critic, self.eval_critic)
+        # 降低action隨機搜索廣度
+        self.var *= .9995                            
