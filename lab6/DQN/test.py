@@ -12,8 +12,8 @@ import os
 
 # 定義 hyper parameters
 batch_size = 128
-epsilon = 0.01          # 以多少機率隨機決定動作
-episode = 5             # 總共玩幾次
+epsilon = 0.00          # 以多少機率隨機決定動作
+episode = 2             # 總共玩幾次
 model_path = './result/dqn2.pth'
 
 def main():
@@ -35,7 +35,7 @@ def main():
         s = env.reset()
         total_reward = 0
         while True:
-            env.render()
+            # env.render()
 
             # Select action and obtain the reward
             a = net.chooseAction(s)
